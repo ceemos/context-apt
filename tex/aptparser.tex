@@ -1,0 +1,236 @@
+\startluacode
+
+function gsub (s, patt, repl)
+  patt = lpeg.P(patt)
+  patt = lpeg.Cs((patt / repl + 1)^0)
+  return lpeg.match(patt, s)
+end
+
+function split (s, sep)
+  sep = lpeg.P(sep)
+  local elem = lpeg.C((1 - sep)^0)
+  local p = lpeg.Ct(elem * (sep * elem)^0)   -- make a table capture
+  return lpeg.match(p, s)
+end
+
+aptparse = aptparse or {}
+
+local any         = lpeg.P(1)
+local lowercase   = lpeg.R("az")
+local uppercase   = lpeg.R("AZ")
+local digit       = lpeg.R("09")
+local signs       = lpeg.S("+-äöüÄÖÜß?!/:.,;#'\"%{}()\\")
+local newline     = lpeg.P("\n")
+local whitespacechar = lpeg.P(lpeg.P(" ") + lpeg.P("\t") + newline)
+local whitespace  = whitespacechar ^ 1
+local fill        = lpeg.S(" \t")^0
+local rule        = lpeg.P("-") ^ 3
+local titrule     = whitespace * rule * whitespace
+local linerest    = lpeg.C((1 - newline)^0) * newline
+local commentsign = (lpeg.P("~") ^ 2)
+local paragraph   = ((any - newline) ^ 1 * newline) ^ 1 * newline
+local word        = lpeg.C((uppercase + lowercase + digit + signs) ^ 1)
+local textline    = lpeg.C((uppercase + lowercase + digit + signs) * (1 - newline)^0) * newline
+local definition  = newline * lpeg.S(" \t") ^ 1 * lpeg.P("[") * lpeg.C((1 - lpeg.P("]")) ^ 1) * lpeg.P("]") * linerest
+local figure      = newline * lpeg.P("[") * lpeg.C((1 - lpeg.P("]")) ^ 1) * lpeg.P("]") * linerest
+local listbullet  = whitespace * lpeg.P("*") * whitespace
+local listletterup= whitespace * lpeg.P("[[") * uppercase * lpeg.P("]]") * whitespace
+local listletterlow= whitespace * lpeg.P("[[") * lowercase * lpeg.P("]]") * whitespace
+local listnumber  = whitespace * lpeg.P("[[") * digit ^ 1 * lpeg.P("]]") * whitespace
+local listend     = lpeg.P("[]")
+local listautoend = newline * lpeg.P(" ") ^ -2 * (1 - lpeg.S("@* \n\t"))
+local verbmarker  = "\nääääää\n"
+local verbbox     = newline * lpeg.P("+") * lpeg.P("-") ^ 3 * lpeg.P("+") * newline
+local verbnobox   = newline * lpeg.P("-") ^ 5 * newline
+local verbtext    = lpeg.P("\0") * lpeg.C((any - lpeg.P("\0")) ^ 0) * lpeg.P("\0")
+local backslash   = lpeg.P("\\")
+local specchar1   = backslash * lpeg.C(digit * digit * digit * (1 - digit))
+local specchar2   = backslash * lpeg.C(lpeg.P("x") * any * any)
+local specchar3   = backslash * lpeg.C(lpeg.P("u") * any * any * any * any)
+
+function aptparse.parseapt(str)
+    io.input(str)
+    t = "\n" .. io.read("*all") .. "\n"
+    
+    -- Verbatim-Boxen sichern
+     -- Box
+    t = gsub(t, verbbox, verbmarker)
+    t, count = string.gsub(t, verbmarker, "\0", 2)
+    n = 0
+    verbboxtexts = {}
+    while count == 2 do
+      n = n + 1
+      verbboxtexts[n] = split(t, lpeg.P("\0"))[2]
+      t = gsub(t, verbtext, "\\par\n@verbbox" .. n .. "\n")
+      t, count = string.gsub(t, verbmarker, "\0", 2)  
+    end
+      -- Ohne Box
+    t = gsub(t, verbnobox, verbmarker)
+    t, count = string.gsub(t, verbmarker, "\0", 2)
+    m = 0
+    verbnoboxtexts = {}
+    while count == 2 do
+      m = m + 1
+      verbnoboxtexts[m] = split(t, lpeg.P("\0"))[2]
+      t = gsub(t, verbtext, "\\par\n@verbnobox" .. m .. "\n")
+      t, count = string.gsub(t, verbmarker, "\0", 2)  
+    end
+    --tex.print(verbboxtexts[1])
+    
+    -- Leerzeichen
+    t = gsub(t, "\n", " \n")
+    
+    -- Sonderzeichen
+    t = gsub(t, "\\\\", "\\Backslash")
+    t = gsub(t, "|", "\\Pipe")
+    t = gsub(t, "%", "\\Percent ")
+    t = gsub(t, "_", "\\Underline ")
+    t = gsub(t, "#", "\\Hash ")
+    t = gsub(t, "$", "\\Dollar ")
+    t = gsub(t, "\\~", "\\Tilde ")
+    t = gsub(t, "\\=", "\\Equals ")
+    t = gsub(t, "\\-", "\\Minus ")
+    t = gsub(t, "\\+", "\\Plus ")
+    t = gsub(t, "\\<", "\\Lt ")
+    t = gsub(t, "\\>", "\\Gt ")
+    t = gsub(t, "\\*", "\\Star ")
+    t = gsub(t, "\\[", "\\Openbracket ")
+    t = gsub(t, "\\]", "\\Closebracket ")
+    
+    t = gsub(t, specchar1, "%1")
+    t = gsub(t, specchar2, "%1")
+    t = gsub(t, specchar3, "%1")
+    
+    -- escape
+    --t = gsub(t, "\\", "/")   
+    
+    -- Kommentare
+    t = gsub(t,commentsign * linerest, "\n")
+
+    -- Kopf
+    
+    t = gsub(t, titrule * textline * titrule, "\\chapter{%1}\n")
+    t = gsub(t, newline * textline * titrule, "\n\\Author{%1}\n      ")
+    
+    -- Auszeichnungen
+    t = gsub(t, lpeg.P("<<<") * lpeg.C((1 - lpeg.P(">>>")) ^ 1) * lpeg.P(">>>") , "{\\tt %1}")
+    t = gsub(t, lpeg.P("<<") * lpeg.C((1 - lpeg.P(">>")) ^ 1) * lpeg.P(">>") , "{\\emem %1}")
+    t = gsub(t, lpeg.P("<") * lpeg.C((1 - lpeg.P(">")) ^ 1) * lpeg.P(">") , "{\\em %1}")
+    
+    -- Sections
+    t = gsub(t, newline * lpeg.C(1 - lpeg.S(" \t\n@*\\=^[]")) * linerest, "\n\\section{%1%2}\n")
+    t = gsub(t, newline * lpeg.P("*") * whitespacechar * linerest, "\n\\subsection{%1}\n")
+    t = gsub(t, newline * lpeg.P("**") * whitespacechar * linerest, "\n\\subsubsection{%1}\n")
+    t = gsub(t, newline * lpeg.P("***") * whitespacechar * linerest, "\n\\subsubject{%1}\n")
+    t = gsub(t, newline * lpeg.P("****") * whitespacechar * linerest, "\n\\subsubsubject{%1}\n")
+    
+    -- Marker
+    t = gsub(t, newline * lpeg.P("=") ^ 3, "\\hairline")
+    t = gsub(t, newline * lpeg.P("^L"), "\\page[yes]")
+
+    -- Listen
+      -- normal
+    t = gsub(t, lpeg.C(listbullet * (1 - listautoend - listend) ^ 0) * lpeg.C(listautoend), "\n\n\\startitemize[1]\n%1\n\\stopitemize\n%2")
+    t = gsub(t, lpeg.C(listbullet * (1 - listend) ^ 0) * listend, "\n\n\\startitemize[1]\n%1\n\\stopitemize\n")
+    t = gsub(t, listbullet * linerest, "\n\\par\\item %1")
+    
+      -- Nummern
+    t = gsub(t, lpeg.C(listnumber * (1 - listautoend - listend) ^ 0) * lpeg.C(listautoend), "\n\n\\startitemize[n]\n%1\n\\stopitemize\n%2")
+    t = gsub(t, lpeg.C(listnumber * (1 - listend) ^ 0) * listend, "\n\n\\startitemize[n]\n%1\n\\stopitemize\n")
+    t = gsub(t, listnumber * linerest, "\n\\par\\item %1")
+    
+      -- Buchstaben klein
+    t = gsub(t, lpeg.C(listletterlow * (1 - listautoend - listend) ^ 0) * lpeg.C(listautoend), "\n\n\\startitemize[a]\n%1\n\\stopitemize\n%2")
+    t = gsub(t, lpeg.C(listletterlow * (1 - listend) ^ 0) * listend, "\n\n\\startitemize[a]\n%1\n\\stopitemize\n")
+    t = gsub(t, listletterlow * linerest, "\n\\par\\item %1")
+    
+      -- Buchstaben gross
+    t = gsub(t, lpeg.C(listletterup * (1 - listautoend - listend) ^ 0) * lpeg.C(listautoend), "\n\n\\startitemize[A]\n%1\n\\stopitemize\n%2")
+    t = gsub(t, lpeg.C(listletterup * (1 - listend) ^ 0) * listend, "\n\n\\startitemize[A]\n%1\n\\stopitemize\n")
+    t = gsub(t, listletterup * linerest, "\n\\par\\item %1")
+    
+    -- Definition
+    t = gsub(t, definition, "\n\n\\definition{%1} %2 \n")
+    
+    -- Grafik
+    t = gsub(t, figure, "\n\\Figure[%1]{%2}\n")
+    
+    -- Einrueckungen entfernen
+    t = gsub(t, newline * lpeg.S(" \t") ^ 0, "\n")
+    
+    -- Absaetze
+    t = gsub(t, lpeg.C(newline * (1 - newline) ^ 1) * lpeg.C((newline * lpeg.S(" \t") ^ 0) ^ 2), "%1\\par%2")
+    t = gsub(t, paragraph, "%0 \\par\n")
+    t = gsub(t,(lpeg.P("\\par") * whitespace) ^ 2, "\\par\n")
+    
+    -- Zeilenumbrüche entfernen
+    t = gsub(t, lpeg.S(" \t\n") ^ 1, " ")
+    
+    -- verbatim-Boxen wiederherstellen
+      -- Box
+    while n > 0 do
+      patt = lpeg.P("@verbbox" .. n)
+      t = gsub(t, patt, "\\startverbbox\n" .. verbboxtexts[n] .. "\n\\stopverbbox\n")
+      n = n - 1
+    end
+      -- Ohne Box
+    while m > 0 do
+      patt = lpeg.P("@verbnobox" .. m)
+      t = gsub(t, patt, "\\startverbnobox\n" .. verbnoboxtexts[m] .. "\n\\stopverbnobox\n")
+      m = m - 1
+    end
+
+    local file = assert(io.open("output.apt.tex", "w"))
+    file:write(t)
+    -- Einkommentieren, um Zwischencode auszugeben
+   --tex.print("\\starttyping")
+    tex.print(t)
+   --tex.print("\\stoptyping")
+    
+    return ""
+    
+end
+
+\stopluacode
+
+% Makro für Kopf/Autor, ggf. überschreiben
+\def\Author#1{{\tfc\em #1}}
+
+% description-Klasse für die Definitionen
+\definedescription[definition][location=top,headstyle=bold]
+
+% die zwei Verbatim-Umgebungen
+\definetyping[verbbox]
+\setuptyping[verbbox][]
+
+\definetyping[verbnobox]
+\setuptyping[verbnobox][]
+  
+% starke hervorhebung << >>, hier fett
+\def\emem{\bf}
+
+% Makro, mit dem Bilder eingebunden werden
+\def\Figure[#1]#2{
+  \placefigure[right]{#2}
+  {\externalfigure[#1][]}}
+  
+% Sonderzeichen
+\def\Tilde{$\tilde{}$}
+\def\Plus{+}
+\def\Minus{-}
+\def\Equals{$=$}
+\def\Lt{$<$}
+\def\Gt{$>$}
+\def\Star{*}
+\def\Openbracket{[}
+\def\Closebracket{]}
+\def\Backslash{\#}
+\def\Pipe{\type{|}}
+\def\Underline{\type{_}}
+\def\Percent{\%}
+\def\Hash{\#}
+\def\Dollar{\$}
+
+
+
+\def\apt#1{\ctxlua{aptparse.parseapt("#1")}}
