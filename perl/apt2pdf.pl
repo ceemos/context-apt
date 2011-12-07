@@ -265,6 +265,9 @@ use Method::Signatures::Simple;
                   +'q!' $INFILE" |);
          my $htm = IO::File->new ($OUTFILE, "r");
          while (my $line = <$htm>) {
+            $line =~ s|&quot;|"|g;
+            $line =~ s|&lt;|<|g;
+            $line =~ s|&gt;|>|g;
             $line =~ s|</?pre>||g;
             $line =~ s|<span class="(\w+)">|[[\\$1 |g;
             $line =~ s|</span>|]]|g;
