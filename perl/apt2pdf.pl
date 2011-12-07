@@ -19,7 +19,28 @@ use Method::Signatures::Simple;
       
       has 'parser', is => 'ro', isa => 'APTParser', required => 1;
       
-      method handleLine ($line) { }
+      method handleLine ($line) {
+         chomp $line;
+         if ($line ~~ /^(\s+)\*\s/) {
+            say ("Default:Have Enum");
+            $self->parser()->enterState (APTParser::State::Enumeration->new (parser => $self->parser(), level => $1));
+            $self->parser()->parseLine ($line);
+         } elsif ($line ~~ /^\s+[^\s]/){
+            say ("Default:Have a Paragraph");
+            $self->parser()->enterState (APTParser::State::Paragraph->new (parser => $self->parser()));
+            $self->parser()->parseLine ($line);
+         } elsif ($line ~~ /^(-+)(\.\w\w?\w?\w?)\s*$/) {
+            say ("Default:Have Code");
+            $self->parser()->enterState (APTParser::State::Sourcecode->new (parser => $self->parser()));
+            $self->parser()->parseLine ($line);
+         } elsif ($line ~~ /^(\+|-)-+/) {
+            say ("Default:Have Verbatim");
+            $self->parser()->enterState (APTParser::State::Verbatim->new (parser => $self->parser()));
+            $self->parser()->parseLine ($line);
+         } else {
+            say ("Default:Have Line $.: $line");
+         }
+      }
       method startState () { }
       method stopState () { }
    }
@@ -29,31 +50,17 @@ use Method::Signatures::Simple;
       extends 'APTParser::State';
       
       override handleLine => method ($line) {
-         chomp $line;
-         if ($line ~~ /^\s+\w/){
-            say ("Doc:Have a Paragraph");
-            $self->parser()->enterState (APTParser::State::Paragraph->new (parser => $self->parser()));
-            $self->parser()->parseLine ($line);
-         } elsif ($line ~~ /^\s+------+\s*$/) {
-            say ("Doc:Have Head");
+         if ($line ~~ /^\s+------+\s*$/) {
+            say ("Default:Have Head");
             $self->parser()->enterState (APTParser::State::Head->new (parser => $self->parser()));
             $self->parser()->parseLine ($line);
          } elsif ($line ~~ /^(\*|\w|\d)/) {
-            say ("Doc:Have Sec");
+            say ("Default:Have Sec");
             $self->parser()->enterState (APTParser::State::SectionTitle->new (parser => $self->parser()));
             $self->parser()->parseLine ($line);
-         } elsif ($line ~~ /^(\s+)\*\s/) {
-            say ("Doc:Have Enum");
-            $self->parser()->enterState (APTParser::State::Enumeration->new (parser => $self->parser(), level => $1));
-            $self->parser()->parseLine ($line);
-         } elsif ($line ~~ /^(\+|-)-+/) {
-            say ("Doc:Have Verbatim");
-            $self->parser()->enterState (APTParser::State::Verbatim->new (parser => $self->parser()));
-            $self->parser()->parseLine ($line);
          } else {
-            say ("Doc:Have Line $.: $line");
+            super ();
          }
-         
       };
       
       override startState => method () {
@@ -114,7 +121,12 @@ use Method::Signatures::Simple;
          my $title = @$e[0];
          my $author = @$e[1];
          my $date = @$e[2];
-         $self->parser->printLinePP ("\\title{ $title} \n \\Author{$author} \n $date \n\n");
+         $self->parser->printLine ("\\title{ ");
+         $self->parser->printLinePP ("$title");
+         $self->parser->printLine ("} \n \\Author{");
+         $self->parser->printLinePP ("$author");
+         $self->parser->printLine ("} \n ");
+         $self->parser->printLinePP ("$date \n\n");
       };
    }
    {  package APTParser::State::SectionTitle;
@@ -153,8 +165,8 @@ use Method::Signatures::Simple;
             if ($1 eq $id) {
                say ("Enum: Have Point");
                $self->parser->printLine ("\\item\n");
-               $self->parser()->enterState (APTParser::State::Paragraph->new (parser => $self->parser()));
-               $self->parser()->parseLine ("   $2");
+               $line = "$id$2";
+               $self->parser->parseLine ($line);
             } else {
                say ("Enum: Have Subenum");
                $self->parser()->enterState (APTParser::State::Enumeration->new (parser => $self->parser(), level => $1));
@@ -163,14 +175,12 @@ use Method::Signatures::Simple;
          } elsif ($line ~~ /^\s*\[]\s*$/) {
             say ("Enum: Have force end");
             $self->parser()->leaveState();
-         } elsif ($line ~~ /^($id\s*)(.+)$/){
-            say ("Enum: Have Paragraph");
-            $self->parser()->enterState (APTParser::State::Paragraph->new (parser => $self->parser()));
-            $self->parser()->parseLine ("   $2");
-         } elsif ($line ~~ /^(\s+)(.*)$/) {
+         } elsif (!($line ~~ /^$id(.*)$/)) {
             say ("Enum: Have less ident");
             $self->parser()->leaveState();
             $self->parser()->parseLine ($line);
+         } else {
+            super ();
          }
       };
       override startState => method () {
@@ -202,10 +212,65 @@ use Method::Signatures::Simple;
          }
       };
       override startState => method () {
-         $self->parser->printLine ("\n\n\\startverbbox\n");
+         $self->parser->printLine ("\\input setup.tex\n");
+         $self->parser->printLine ("\\startverbbox\n");
       };
       override stopState => method () {
-         $self->parser->printLine ("\n\\stopverbbox\n");
+         $self->parser->printLine ("\\stopverbbox");
+      };
+   }
+   {  package APTParser::State::Sourcecode;
+      use Any::Moose; use Method::Signatures::Simple;
+      extends 'APTParser::State';
+      
+      has 'type', is => 'rw', default => "";
+      has 'tempfile', is => 'rw';
+      has 'tempname', is => 'rw';
+      
+      override handleLine => method ($line) {
+         chomp $line;
+         if ($self->type() eq "" && $line ~~ /^(-+)(\.\w\w?\w?\w?)\s*$/) {
+            say ("Code:Have Box at $. type $2, border $1");
+            $self->type ($1);
+            my $tempname = "~temp$2";
+            my $file = IO::File->new ($tempname, "w");
+            $self->tempfile ($file);
+            $self->tempname ($tempname);
+         } else {
+            my $border = $self->type();
+            if (index ($line, $border) == 0) {
+               $self->parser()->leaveState();
+            } else {
+               say ("Code $.: $line");
+               $self->tempfile()->print ("$line\n");
+            }
+         }
+      };
+      override startState => method () {
+         $self->parser->printLine ("\n\n\\startcodebox\n");
+      };
+      override stopState => method () {
+         $self->tempfile()->close();
+         my $INFILE = $self->tempname(); 
+         my $OUTFILE = "~temp.htm";
+         system (q|bash -c "vim +'set nonumber' \
+                  +'syntax enable' \
+                  +'let html_use_css=1' \
+                  +'TOhtml' \
+                  +'/<pre>/,/<\/pre>/d a' \
+                  +'g/./d' \
+                  +'1pu! a' \
+                  +'\$d' \
+                  +'wq! | . qq | $OUTFILE' \\
+                  +'q!' $INFILE" |);
+         my $htm = IO::File->new ($OUTFILE, "r");
+         while (my $line = <$htm>) {
+            $line =~ s|</?pre>||g;
+            $line =~ s|<span class="(\w+)">|[[\\$1 |g;
+            $line =~ s|</span>|]]|g;
+            $self->parser->printLine ($line);
+         }
+         $self->parser->printLine ("\n\\stopcodebox\n");
       };
    }
    
@@ -241,6 +306,9 @@ use Method::Signatures::Simple;
    }
    
    method parseLine ($line) {
+      if ($line ~~ /^~~/) {
+         return; # Kommentar
+      }
       my $states = $self->state();
       @$states[-1]->handleLine ($line);
    }
@@ -250,10 +318,19 @@ use Method::Signatures::Simple;
    }
    
    method printLinePP ($line) {
-      $line =~ s/(?<!\\)<<</{\\tt /g;
-      $line =~ s/(?<!\\)<</{\\bf /g;
-      $line =~ s/(?<!\\)</{\\it /g;
-      $line =~ s/(?<!\\)>+/} /g;
+      # Sonderzeichen
+      $line =~ s/\\/~/g;
+      $line =~ s/~~/\\#/g;
+      $line =~ s/\|/\\Pipe /g;
+      $line =~ s/{/ /g;
+      $line =~ s/}/ /g;
+      $line =~ s/~/ /g;
+      
+      # Einfaches HL
+      $line =~ s/(?<!~)<<<([^>]*)>>>/{\\tt $1} /g;
+      $line =~ s/(?<!~)<<([^>]*)>>/{\\bf $1} /g;
+      $line =~ s/(?<!~)<([^>]*)>/{\\it $1} /g;
+      
       $self->outfile()->print ($line);
    }
 }

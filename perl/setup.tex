@@ -48,25 +48,23 @@
 
 \setuphead[section][number=no,
                     style=\ss\bfc,
-                    before={\vskip 2ex \page[bigpreference]}
+                    before={\page[bigpreference]}
                     ]
 \setuphead[subsection][number=no,
                     style=\ss\bfb, 
-                    before={\vskip 0ex \page[bigpreference]},
+                    before={\page[bigpreference]},
                     ]
 \setuphead[subsubsection][number=no,
                     style=\ss\bfa,
-                    before={\vskip -0ex \page[bigpreference]},
+                    before={\page[bigpreference]},
                     ]
 
 \setuphead[subsubject][textstyle=\ss\tfa,
-                    after={\vskip -0.5ex},
-                    before={\vskip 0.5ex \page[preference]}
+                    before={\page[preference]}
                     ]
 
 \setuphead[subsubsubject][textstyle=\rm\tfa\it,
-                    after={\vskip -0.5ex},
-                    before={\vskip 0.5ex \page[preference]}
+                    before={\page[preference]}
                     ]
                     
 \setupdescriptions[definition][
@@ -98,12 +96,30 @@
 % Setup verbatim
 \definetyping[verbbox]
 \definetyping[verbnobox]
+\definetyping[codebox]
 
 \setuptyping[verbbox][margin=1cm,
             numbering=line,
             before={\starttextbackground[verbatim]},
             after={\stoptextbackground},
-            bodyfont=10pt]
+            bodyfont=10pt,
+	    ]
+
+\setuptyping[codebox][margin=1cm,
+            escape={[[,]]},
+	    numbering=line,
+            before={\starttextbackground[verbatim]},
+            after={\stoptextbackground},
+            bodyfont=10pt
+	    ]
+
+% colors
+\def\Statement{\em}
+\def\Comment{\em}
+\def\Constant{\em}
+\def\Special{\em}
+\def\Type{\em}
+
             
 \setuptyping[verbnobox][margin=1cm,
             before={\vskip -1ex},
@@ -129,6 +145,23 @@
 
 % description-Klasse für die Definitionen
 \definedescription[definition][location=top,headstyle=bold]
+
+% Sonderzeichen
+\def\Tilde{$\tilde{}$}
+\def\Plus{+}
+\def\Minus{-}
+\def\Equals{$=$}
+\def\Lt{$<$}
+\def\Gt{$>$}
+\def\Star{*}
+\def\Openbracket{[}
+\def\Closebracket{]}
+\def\Backslash{\#}
+\def\Pipe{\type{|}}
+\def\Underline{\type{_}}
+\def\Percent{\%}
+\def\Hash{\#}
+\def\Dollar{\$}
 
 
 
