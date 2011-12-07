@@ -64,7 +64,7 @@ use Method::Signatures::Simple;
       };
       
       override startState => method () {
-         $self->parser->printLine ("\\input setup.tex\n");
+         # $self->parser->printLine ("\\input setup.tex\n");
          $self->parser->printLine ("\\starttext\n");
       };
       override stopState => method () {
@@ -212,7 +212,6 @@ use Method::Signatures::Simple;
          }
       };
       override startState => method () {
-         $self->parser->printLine ("\\input setup.tex\n");
          $self->parser->printLine ("\\startverbbox\n");
       };
       override stopState => method () {
@@ -346,6 +345,171 @@ func readFile ($file, $parser) {
 }
 
 my $o = IO::File->new ("out.tex", "w");
+
+$o->print (q!
+\language[de]
+\mainlanguage[de]
+\enableregime[utf]
+
+\setupcolors[state=start]       % otherwise you get greyscale
+
+\usetypescript[palatino]
+\definetypeface [palatino] [rm] [serif] [palatino] [default]
+\switchtotypeface [palatino] [12pt,rm]
+
+\setuppapersize[A4][A4]
+\setuppagenumbering[alternative=singlesided]
+\setuplayout[header=16pt]
+\setuplayout[footer=16pt]
+\setuplayout[topspace=1cm]
+\setuplayout[leftmargin=1.5cm]
+\setuplayout[rightmargin=1cm]
+\setuplayout[backspace=2.5cm]
+\setuplayout[width=17cm]
+\setuplayout[height=27cm]
+\setuplayout[footerdistance=3mm]
+
+\clubpenalty=10000
+\widowpenalty=10000
+
+% uncomment the next line to see the layout
+%\showframe
+
+\setuppagenumbering[location={footer,right}, style=bold]
+
+
+\setupinteraction[state=start,  % make hyperlinks active, etc.
+  title={APT},
+  subtitle={},
+  author={},
+  keyword={}]
+  
+  
+\def\Author#1{{\sc von #1} \hfill}
+
+  
+\def\roemisch#1{\uppercase\expandafter{\romannumeral#1}}
+
+\setuphead[chapter][
+                    style=\ss\tfd,
+                    page=yes
+                    ]
+
+\setuphead[section][number=no,
+                    style=\ss\bfc,
+                    before={\page[bigpreference]}
+                    ]
+\setuphead[subsection][number=no,
+                    style=\ss\bfb, 
+                    before={\page[bigpreference]},
+                    ]
+\setuphead[subsubsection][number=no,
+                    style=\ss\bfa,
+                    before={\page[bigpreference]},
+                    ]
+
+\setuphead[subsubject][textstyle=\ss\tfa,
+                    before={\page[preference]}
+                    ]
+
+\setuphead[subsubsubject][textstyle=\rm\tfa\it,
+                    before={\page[preference]}
+                    ]
+                    
+\setupdescriptions[definition][
+                    headstyle=\ss\bf,
+                    location=top,
+                    hang=30,
+                    before={\vskip -0.5ex},
+                    after={\vskip -0.5ex},
+                    command=\hskip-0.5cm,
+                    inbetween={\vskip -0.8ex},
+                    margin=1cm
+                    ]
+                    
+\definecolor [code] [h=DDDDFF]
+
+\definetextbackground[verbatim]
+     [
+      background=color,
+      backgroundcolor=code,
+      backgroundoffset=0cm,
+      offset=0.5cm,
+      frame=of,
+      framecolor=black,
+      location=paragraph,
+      color=black
+      ]
+              
+% Setup verbatim
+\definetyping[verbbox]
+\definetyping[verbnobox]
+\definetyping[codebox]
+
+\setuptyping[verbbox][margin=1cm,
+            numbering=line,
+            before={\starttextbackground[verbatim]},
+            after={\stoptextbackground},
+            bodyfont=10pt,
+            ]
+
+\setuptyping[codebox][margin=1cm,
+            escape={[[,]]},
+            numbering=line,
+            before={\starttextbackground[verbatim]},
+            after={\stoptextbackground},
+            bodyfont=10pt
+            ]
+
+% colors
+\def\Statement{\bf\color[blue]}
+\def\Comment{\em}
+\def\Constant{\color[orange]}
+\def\Special{\bf}
+\def\Type{\bf\color[blue]}
+
+            
+\setuptyping[verbnobox][margin=1cm,
+            before={\vskip -1ex},
+            after={}
+            ]
+            
+\setuplinenumbering[location=intext,
+                    width=1em,
+                    style=\ss\tfx
+                    ]
+
+\setupcaptions[location=bottom,
+  align=middle,
+  style={\ss\tfx},
+  headstyle={\ss\bfxx},
+  number=yes]
+  
+\setuplabeltext[de][figure=Grafik ]
+
+% set inter-paragraph spacing
+\setupwhitespace[medium]
+
+% description-Klasse für die Definitionen
+\definedescription[definition][location=top,headstyle=bold]
+
+% Sonderzeichen
+\def\Tilde{$\tilde{}$}
+\def\Plus{+}
+\def\Minus{-}
+\def\Equals{$=$}
+\def\Lt{$<$}
+\def\Gt{$>$}
+\def\Star{*}
+\def\Openbracket{[}
+\def\Closebracket{]}
+\def\Backslash{\#}
+\def\Pipe{\type{|}}
+\def\Underline{\type{_}}
+\def\Percent{\%}
+\def\Hash{\#}
+\def\Dollar{\$}
+!);
 
 my $p = APTParser->new (outfile => $o);
 
